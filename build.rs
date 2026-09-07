@@ -92,8 +92,28 @@ fn rounded_rect(x: f32, y: f32, left: f32, top: f32, right: f32, bottom: f32, ra
         return false;
     }
 
-    let cx = x.clamp(left + radius, right - radius);
-    let cy = y.clamp(top + radius, bottom - radius);
+    let radius = radius
+        .max(0.0)
+        .min((right - left).max(0.0) / 2.0)
+        .min((bottom - top).max(0.0) / 2.0);
+    let inner_left = left + radius;
+    let inner_right = right - radius;
+    let inner_top = top + radius;
+    let inner_bottom = bottom - radius;
+
+    // At tiny icon sizes floating-point rounding can make the two inner bounds cross by
+    // less than a micro-pixel. Use the geometric midpoint instead of f32::clamp in that case.
+    let cx = if inner_left <= inner_right {
+        x.clamp(inner_left, inner_right)
+    } else {
+        (left + right) * 0.5
+    };
+    let cy = if inner_top <= inner_bottom {
+        y.clamp(inner_top, inner_bottom)
+    } else {
+        (top + bottom) * 0.5
+    };
+
     let dx = x - cx;
     let dy = y - cy;
     dx * dx + dy * dy <= radius * radius
