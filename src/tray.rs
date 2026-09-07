@@ -3,6 +3,7 @@ use std::{mem::size_of, ptr::null_mut, sync::OnceLock};
 use async_channel::Sender;
 use windows_sys::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM},
+    Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST},
     System::LibraryLoader::GetModuleHandleW,
     UI::{
         Shell::{
@@ -10,12 +11,11 @@ use windows_sys::Win32::{
             NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
         },
         WindowsAndMessaging::{
-            AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, GetMonitorInfoW, LoadIconW,
-            MessageBoxW, MonitorFromPoint, SetForegroundWindow, SetWindowPos, ShowWindow,
-            TrackPopupMenu, HWND_TOPMOST, IDI_APPLICATION, MB_ICONERROR, MB_OK, MF_SEPARATOR,
-            MF_STRING, MONITORINFO, MONITOR_DEFAULTTONEAREST, SW_HIDE, SW_SHOW, SWP_NOSIZE,
-            SWP_SHOWWINDOW, TPM_RETURNCMD, TPM_RIGHTBUTTON, WA_INACTIVE, WM_ACTIVATE, WM_APP,
-            WM_LBUTTONUP, WM_NCDESTROY, WM_RBUTTONUP,
+            AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, LoadIconW, MessageBoxW,
+            SetForegroundWindow, SetWindowPos, ShowWindow, TrackPopupMenu, HWND_TOPMOST,
+            IDI_APPLICATION, MB_ICONERROR, MB_OK, MF_SEPARATOR, MF_STRING, SW_HIDE, SW_SHOW,
+            SWP_NOSIZE, SWP_SHOWWINDOW, TPM_RETURNCMD, TPM_RIGHTBUTTON, WA_INACTIVE, WM_ACTIVATE,
+            WM_APP, WM_LBUTTONUP, WM_NCDESTROY, WM_RBUTTONUP,
         },
     },
 };
@@ -178,7 +178,7 @@ unsafe fn show_context_menu(hwnd: HWND) {
     let refresh = wide("刷新");
     let exit = wide("退出");
     AppendMenuW(menu, MF_STRING, CMD_REFRESH, refresh.as_ptr());
-    AppendMenuW(menu, MF_SEPARATOR, 0, null_mut());
+    AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
     AppendMenuW(menu, MF_STRING, CMD_EXIT, exit.as_ptr());
 
     let mut cursor = POINT::default();
