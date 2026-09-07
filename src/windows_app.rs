@@ -60,13 +60,11 @@ const PANEL_HEIGHT: i32 = 198;
 const CMD_REFRESH: usize = 1001;
 const CMD_EXIT: usize = 1002;
 
-// Documented dwmapi.h enum values. We use only Windows' own DWM APIs; no WinUI runtime is linked.
+// Documented dwmapi.h values. DWM is used only for native dark mode and rounded corners;
+// the popup intentionally uses no Mica/Acrylic/system-backdrop material.
 const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
 const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
-const DWMWA_SYSTEMBACKDROP_TYPE: u32 = 38;
-const DWMWA_REDIRECTIONBITMAP_ALPHA: u32 = 39;
 const DWMWCP_ROUND: i32 = 2;
-const DWMSBT_TRANSIENTWINDOW: i32 = 3;
 
 #[derive(Clone, Default)]
 struct DisplayState {
@@ -76,7 +74,6 @@ struct DisplayState {
 
 static STATE: OnceLock<Arc<Mutex<DisplayState>>> = OnceLock::new();
 static REFRESHING: AtomicBool = AtomicBool::new(false);
-static ACRYLIC_ENABLED: AtomicBool = AtomicBool::new(false);
 
 thread_local! {
     static RENDERER: RefCell<Option<FluentRenderer>> = const { RefCell::new(None) };
@@ -128,8 +125,7 @@ pub fn run() -> Result<(), String> {
             return Err("Cannot create popup window".to_string());
         }
 
-        let acrylic = apply_fluent_window_attributes(hwnd);
-        ACRYLIC_ENABLED.store(acrylic, Ordering::Release);
+        apply_fluent_window_attributes(hwnd);
 
         let renderer = match FluentRenderer::new(hwnd as isize, PANEL_WIDTH as u32, PANEL_HEIGHT as u32) {
             Ok(renderer) => renderer,
@@ -208,8 +204,7 @@ unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wparam: WPARAM, 
             0
         }
         WM_SETTINGCHANGE | WM_THEMECHANGED => {
-            let acrylic = apply_fluent_window_attributes(hwnd);
-            ACRYLIC_ENABLED.store(acrylic, Ordering::Release);
+            apply_fluent_window_attributes(hwnd);
             InvalidateRect(hwnd, null(), 0);
             0
         }
@@ -407,11 +402,7 @@ unsafe fn paint_popup(hwnd: HWND) {
     GetClientRect(hwnd, &mut client);
     let width = (client.right - client.left).max(1) as f32;
     let height = (client.bottom - client.top).max(1) as f32;
-    let theme = fluent_renderer::system_theme(
-        apps_use_dark_theme(),
-        system_highlight_rgb(),
-        ACRYLIC_ENABLED.load(Ordering::Acquire),
-    );
+    let theme = fluent_renderer::system_theme(apps_use_dark_theme(), system_highlight_rgb());
 
     RENDERER.with(|slot| {
         let mut slot = slot.borrow_mut();
@@ -467,18 +458,10 @@ fn footer_text(state: &DisplayState) -> String {
     "读取 Codex 登录信息后显示用量".to_string()
 }
 
-unsafe fn apply_fluent_window_attributes(hwnd: HWND) -> bool {
+unsafe fn apply_fluent_window_attributes(hwnd: HWND) {
     let dark_mode = i32::from(apps_use_dark_theme());
     let _ = set_dwm_i32(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, dark_mode);
     let _ = set_dwm_i32(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND);
-
-    // Windows 11 22H2+: transient-window backdrop maps to Desktop/Background Acrylic.
-    let acrylic = set_dwm_i32(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW);
-
-    // Windows 11 build 26100+: let the premultiplied-alpha D2D target reveal that backdrop.
-    // On older builds this attribute fails harmlessly and the renderer uses WinUI's solid fallback.
-    let alpha = set_dwm_i32(hwnd, DWMWA_REDIRECTIONBITMAP_ALPHA, 1);
-    acrylic && alpha
 }
 
 unsafe fn set_dwm_i32(hwnd: HWND, attribute: u32, value: i32) -> bool {
