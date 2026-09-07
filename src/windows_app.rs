@@ -389,7 +389,7 @@ unsafe extern "system" fn menu_window_proc(
 }
 
 unsafe fn load_app_icon(instance: *mut core::ffi::c_void) -> *mut core::ffi::c_void {
-    let embedded = LoadIconW(instance, 1usize as *const u16);
+    let embedded = LoadIconW(instance, std::ptr::without_provenance::<u16>(1usize));
     if embedded.is_null() {
         LoadIconW(null_mut(), IDI_APPLICATION)
     } else {
@@ -398,13 +398,15 @@ unsafe fn load_app_icon(instance: *mut core::ffi::c_void) -> *mut core::ffi::c_v
 }
 
 unsafe fn add_tray_icon(hwnd: HWND, app_icon: *mut core::ffi::c_void) -> Result<(), String> {
-    let mut icon = NOTIFYICONDATAW::default();
-    icon.cbSize = size_of::<NOTIFYICONDATAW>() as u32;
-    icon.hWnd = hwnd;
-    icon.uID = TRAY_ID;
-    icon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-    icon.uCallbackMessage = WM_TRAY;
-    icon.hIcon = app_icon;
+    let mut icon = NOTIFYICONDATAW {
+        cbSize: size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: hwnd,
+        uID: TRAY_ID,
+        uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP,
+        uCallbackMessage: WM_TRAY,
+        hIcon: app_icon,
+        ..Default::default()
+    };
     copy_wide_fixed("Codex Usage", &mut icon.szTip);
 
     if Shell_NotifyIconW(NIM_ADD, &icon) == 0 {
@@ -414,10 +416,12 @@ unsafe fn add_tray_icon(hwnd: HWND, app_icon: *mut core::ffi::c_void) -> Result<
 }
 
 unsafe fn remove_tray_icon(hwnd: HWND) {
-    let mut icon = NOTIFYICONDATAW::default();
-    icon.cbSize = size_of::<NOTIFYICONDATAW>() as u32;
-    icon.hWnd = hwnd;
-    icon.uID = TRAY_ID;
+    let icon = NOTIFYICONDATAW {
+        cbSize: size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: hwnd,
+        uID: TRAY_ID,
+        ..Default::default()
+    };
     Shell_NotifyIconW(NIM_DELETE, &icon);
 }
 
