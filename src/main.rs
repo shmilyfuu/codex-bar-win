@@ -5,6 +5,8 @@ mod usage;
 #[cfg(target_os = "windows")]
 mod fluent_renderer;
 #[cfg(target_os = "windows")]
+mod menu_renderer;
+#[cfg(target_os = "windows")]
 mod windows_app;
 
 #[cfg(target_os = "windows")]
