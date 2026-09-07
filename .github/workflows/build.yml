@@ -29,6 +29,13 @@ jobs:
           path: target/release/codex-bar-win.exe
           if-no-files-found: error
 
+      - name: Upload Cargo lock for release review
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock-review
+          path: Cargo.lock
+          if-no-files-found: error
+
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: windows
