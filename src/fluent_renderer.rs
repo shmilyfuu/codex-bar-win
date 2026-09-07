@@ -43,14 +43,9 @@ pub struct RenderModel<'a> {
 pub struct Theme {
     pub dark: bool,
     pub accent_rgb: (u8, u8, u8),
-    pub acrylic: bool,
 }
 
-pub fn system_theme(
-    fallback_dark: bool,
-    fallback_accent: (u8, u8, u8),
-    acrylic: bool,
-) -> Theme {
+pub fn system_theme(fallback_dark: bool, fallback_accent: (u8, u8, u8)) -> Theme {
     let mut dark = fallback_dark;
     let mut accent_rgb = fallback_accent;
 
@@ -72,11 +67,7 @@ pub fn system_theme(
         }
     }
 
-    Theme {
-        dark,
-        accent_rgb,
-        acrylic,
-    }
+    Theme { dark, accent_rgb }
 }
 
 pub struct FluentRenderer {
@@ -140,9 +131,9 @@ impl FluentRenderer {
 
         unsafe {
             self.target.BeginDraw();
-            self.target.Clear(Some(&rgba(0, 0, 0, 0)));
+            // Solid WinUI surface: no Acrylic/Mica/backdrop blending.
+            self.target.Clear(Some(&palette.surface_fill));
 
-            let surface_fill = self.brush(palette.surface_fill)?;
             let surface_stroke = self.brush(palette.surface_stroke)?;
             let primary = self.brush(palette.text_primary)?;
             let secondary = self.brush(palette.text_secondary)?;
@@ -157,7 +148,6 @@ impl FluentRenderer {
                 radiusX: 8.0,
                 radiusY: 8.0,
             };
-            self.target.FillRoundedRectangle(&surface, &surface_fill);
             self.target.DrawRoundedRectangle(&surface, &surface_stroke, 1.0, None);
 
             // Windows content gutter = 16 epx.
@@ -337,11 +327,11 @@ impl Palette {
         let (r, g, b) = theme.accent_rgb;
         if theme.dark {
             Self {
-                // Microsoft.UI.Xaml Common_themeresources_any.xaml, Default dictionary.
+                // WinUI 3 dark SolidBackgroundFillColorBase / application surface.
                 text_primary: rgba(255, 255, 255, 255),
                 text_secondary: rgba(255, 255, 255, 0xC5),
                 text_tertiary: rgba(255, 255, 255, 0x87),
-                surface_fill: if theme.acrylic { rgba(255, 255, 255, 0x09) } else { rgba(32, 32, 32, 255) },
+                surface_fill: rgba(32, 32, 32, 255),
                 surface_stroke: rgba(0, 0, 0, 0x33),
                 progress_track: rgba(255, 255, 255, 0x8B),
                 accent: rgba(r, g, b, 255),
@@ -349,11 +339,11 @@ impl Palette {
             }
         } else {
             Self {
-                // Microsoft.UI.Xaml Common_themeresources_any.xaml, Light dictionary.
+                // WinUI 3 light SolidBackgroundFillColorBase / application surface.
                 text_primary: rgba(0, 0, 0, 0xE4),
                 text_secondary: rgba(0, 0, 0, 0x9E),
                 text_tertiary: rgba(0, 0, 0, 0x72),
-                surface_fill: if theme.acrylic { rgba(255, 255, 255, 0x40) } else { rgba(243, 243, 243, 255) },
+                surface_fill: rgba(243, 243, 243, 255),
                 surface_stroke: rgba(0, 0, 0, 0x0F),
                 progress_track: rgba(0, 0, 0, 0x72),
                 accent: rgba(r, g, b, 255),
