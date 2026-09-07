@@ -1,32 +1,31 @@
 use windows::{
     core::PCWSTR,
-    UI::ViewManagement::{UIColorType, UISettings},
     Win32::{
         Foundation::HWND,
         Graphics::{
             Direct2D::{
                 Common::{
-                    D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
-                    D2D_RECT_F, D2D_SIZE_U,
+                    D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT, D2D_RECT_F,
+                    D2D_SIZE_U,
                 },
-                D2D1CreateFactory, D2D1_DRAW_TEXT_OPTIONS_NONE,
-                D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_FEATURE_LEVEL_DEFAULT,
-                D2D1_HWND_RENDER_TARGET_PROPERTIES, D2D1_PRESENT_OPTIONS_NONE,
-                D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_DEFAULT,
-                D2D1_RENDER_TARGET_USAGE_NONE, D2D1_ROUNDED_RECT, ID2D1Factory,
-                ID2D1HwndRenderTarget, ID2D1SolidColorBrush,
+                D2D1CreateFactory, ID2D1Factory, ID2D1HwndRenderTarget, ID2D1SolidColorBrush,
+                D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                D2D1_FEATURE_LEVEL_DEFAULT, D2D1_HWND_RENDER_TARGET_PROPERTIES,
+                D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES,
+                D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1_RENDER_TARGET_USAGE_NONE, D2D1_ROUNDED_RECT,
             },
             DirectWrite::{
-                DWriteCreateFactory, DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL,
-                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_NORMAL,
-                DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_MEASURING_MODE_NATURAL,
-                DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_TEXT_ALIGNMENT_LEADING,
-                DWRITE_TEXT_ALIGNMENT_TRAILING, DWRITE_WORD_WRAPPING_NO_WRAP, IDWriteFactory,
-                IDWriteFontCollection, IDWriteTextFormat,
+                DWriteCreateFactory, IDWriteFactory, IDWriteFontCollection, IDWriteTextFormat,
+                DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                DWRITE_MEASURING_MODE_NATURAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+                DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_TEXT_ALIGNMENT_TRAILING,
+                DWRITE_WORD_WRAPPING_NO_WRAP,
             },
             Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM,
         },
     },
+    UI::ViewManagement::{UIColorType, UISettings},
 };
 
 pub struct RenderRow<'a> {
@@ -63,7 +62,8 @@ pub fn system_theme(fallback_dark: bool, fallback_accent: (u8, u8, u8)) -> Theme
 
     if let Ok(settings) = UISettings::new() {
         if let Ok(background) = settings.GetColorValue(UIColorType::Background) {
-            dark = u16::from(background.R) + u16::from(background.G) + u16::from(background.B) < 384;
+            dark =
+                u16::from(background.R) + u16::from(background.G) + u16::from(background.B) < 384;
         }
 
         let accent_type = if dark {
@@ -314,7 +314,13 @@ unsafe fn draw_row(
     y: f32,
     width: f32,
 ) {
-    draw_text(target, row.label, body, primary, rect(16.0, y, 150.0, y + 20.0));
+    draw_text(
+        target,
+        row.label,
+        body,
+        primary,
+        rect(16.0, y, 150.0, y + 20.0),
+    );
     draw_text(
         target,
         row.value,

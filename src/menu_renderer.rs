@@ -5,23 +5,21 @@ use windows::{
         Graphics::{
             Direct2D::{
                 Common::{
-                    D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
-                    D2D_RECT_F, D2D_SIZE_U,
+                    D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT, D2D_RECT_F,
+                    D2D_SIZE_U,
                 },
-                D2D1CreateFactory, D2D1_DRAW_TEXT_OPTIONS_NONE,
-                D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_FEATURE_LEVEL_DEFAULT,
-                D2D1_HWND_RENDER_TARGET_PROPERTIES, D2D1_PRESENT_OPTIONS_NONE,
-                D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_DEFAULT,
-                D2D1_RENDER_TARGET_USAGE_NONE, D2D1_ROUNDED_RECT, ID2D1Factory,
-                ID2D1HwndRenderTarget, ID2D1SolidColorBrush,
+                D2D1CreateFactory, ID2D1Factory, ID2D1HwndRenderTarget, ID2D1SolidColorBrush,
+                D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                D2D1_FEATURE_LEVEL_DEFAULT, D2D1_HWND_RENDER_TARGET_PROPERTIES,
+                D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES,
+                D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1_RENDER_TARGET_USAGE_NONE, D2D1_ROUNDED_RECT,
             },
             DirectWrite::{
-                DWriteCreateFactory, DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL,
-                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_WEIGHT_NORMAL,
-                DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_MEASURING_MODE_NATURAL,
-                DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_TEXT_ALIGNMENT_LEADING,
-                DWRITE_WORD_WRAPPING_NO_WRAP, IDWriteFactory, IDWriteFontCollection,
-                IDWriteTextFormat,
+                DWriteCreateFactory, IDWriteFactory, IDWriteFontCollection, IDWriteTextFormat,
+                DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                DWRITE_MEASURING_MODE_NATURAL, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
+                DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_WORD_WRAPPING_NO_WRAP,
             },
             Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM,
         },
@@ -132,7 +130,8 @@ impl MenuRenderer {
                 radiusX: 8.0,
                 radiusY: 8.0,
             };
-            self.target.DrawRoundedRectangle(&outline, &stroke, 1.0, None);
+            self.target
+                .DrawRoundedRectangle(&outline, &stroke, 1.0, None);
 
             if let Some(item) = model.hovered {
                 if let Some((top, bottom)) = row_bounds(item) {
@@ -145,7 +144,13 @@ impl MenuRenderer {
                 }
             }
 
-            draw_text(&self.target, "刷新", &self.body, &primary, rect(14.0, 8.0, 206.0, 40.0));
+            draw_text(
+                &self.target,
+                "刷新",
+                &self.body,
+                &primary,
+                rect(14.0, 8.0, 206.0, 40.0),
+            );
             fill_rect(&self.target, &stroke, 10.0, 45.0, 210.0, 46.0);
 
             draw_text(
@@ -267,7 +272,13 @@ unsafe fn draw_radio_row(
         if selected { accent } else { secondary },
         rect(14.0, top, 34.0, top + 32.0),
     );
-    draw_text(target, label, body, primary, rect(40.0, top, 206.0, top + 32.0));
+    draw_text(
+        target,
+        label,
+        body,
+        primary,
+        rect(40.0, top, 206.0, top + 32.0),
+    );
 }
 
 unsafe fn fill_rect(

@@ -26,19 +26,18 @@ use windows_sys::Win32::{
     },
     UI::{
         Shell::{
-            Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE,
-            NOTIFYICONDATAW,
+            Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
         },
         WindowsAndMessaging::{
             CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect,
             GetCursorPos, GetMessageW, GetWindowRect, IsWindowVisible, KillTimer, LoadCursorW,
             LoadIconW, MessageBoxW, PostMessageW, PostQuitMessage, RegisterClassW,
             SetForegroundWindow, SetProcessDPIAware, SetTimer, SetWindowPos, ShowWindow,
-            TranslateMessage, WNDCLASSW, HWND_TOPMOST, IDC_ARROW, IDI_APPLICATION, MB_ICONERROR,
-            MB_OK, MSG, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_SHOWWINDOW, WA_INACTIVE,
-            WM_ACTIVATE, WM_APP, WM_DESTROY, WM_ERASEBKGND, WM_LBUTTONUP, WM_MOUSEMOVE,
-            WM_PAINT, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_THEMECHANGED, WM_TIMER,
-            WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+            TranslateMessage, HWND_TOPMOST, IDC_ARROW, IDI_APPLICATION, MB_ICONERROR, MB_OK, MSG,
+            SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOW, WA_INACTIVE, WM_ACTIVATE, WM_APP,
+            WM_DESTROY, WM_ERASEBKGND, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT, WM_RBUTTONUP,
+            WM_SETTINGCHANGE, WM_THEMECHANGED, WM_TIMER, WNDCLASSW, WS_EX_TOOLWINDOW,
+            WS_EX_TOPMOST, WS_POPUP,
         },
     },
 };
@@ -230,7 +229,12 @@ pub fn show_fatal_error(message: &str) {
     unsafe {
         let text = wide(message);
         let title = wide("Codex Usage");
-        MessageBoxW(null_mut(), text.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR);
+        MessageBoxW(
+            null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONERROR,
+        );
     }
 }
 
@@ -570,7 +574,8 @@ unsafe fn apply_menu_action(menu_hwnd: HWND, item: MenuItem) {
 }
 
 fn refresh_usage_async(hwnd: HWND) {
-    if REFRESHING.load(Ordering::Acquire) || !mark_request_due(&LAST_USAGE_REQUEST, USAGE_DEBOUNCE) {
+    if REFRESHING.load(Ordering::Acquire) || !mark_request_due(&LAST_USAGE_REQUEST, USAGE_DEBOUNCE)
+    {
         return;
     }
     if REFRESHING.swap(true, Ordering::AcqRel) {
@@ -730,10 +735,9 @@ unsafe fn paint_popup(hwnd: HWND) {
     let identity = identity_text(state.snapshot.as_ref());
     let footer = footer_text(&state);
     let credit = credit_strings(state.credits.as_ref());
-    let reset_credit = credit.as_ref().map(|(value, expiry)| RenderCredit {
-        value,
-        expiry,
-    });
+    let reset_credit = credit
+        .as_ref()
+        .map(|(value, expiry)| RenderCredit { value, expiry });
 
     let model = RenderModel {
         status,
@@ -890,7 +894,12 @@ fn current_panel_height() -> i32 {
     let has_credits = STATE
         .get()
         .and_then(|state| state.lock().ok())
-        .and_then(|state| state.credits.as_ref().map(|credits| credits.available_count > 0))
+        .and_then(|state| {
+            state
+                .credits
+                .as_ref()
+                .map(|credits| credits.available_count > 0)
+        })
         .unwrap_or(false);
     if has_credits {
         PANEL_HEIGHT_CREDITS
@@ -1050,11 +1059,7 @@ fn wide(value: &str) -> Vec<u16> {
 }
 
 fn copy_wide_fixed<const N: usize>(value: &str, target: &mut [u16; N]) {
-    for (index, unit) in value
-        .encode_utf16()
-        .take(N.saturating_sub(1))
-        .enumerate()
-    {
+    for (index, unit) in value.encode_utf16().take(N.saturating_sub(1)).enumerate() {
         target[index] = unit;
     }
 }

@@ -6,8 +6,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
-const RESET_CREDITS_URL: &str =
-    "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
+const RESET_CREDITS_URL: &str = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits";
 
 #[derive(Clone, Debug, Default)]
 pub struct UsageWindow {
@@ -244,15 +243,12 @@ fn parse_reset_credits(body: &str) -> Result<ResetCreditsSnapshot, String> {
 
 fn normalize_window(window: &RawWindow, now: i64) -> Option<UsageWindow> {
     let used_percent = window.used_percent?.clamp(0.0, 100.0);
-    let reset_at = window
-        .reset_at
-        .map(normalize_timestamp)
-        .or_else(|| {
-            window
-                .reset_after_seconds
-                .filter(|value| *value >= 0)
-                .map(|value| now + value)
-        });
+    let reset_at = window.reset_at.map(normalize_timestamp).or_else(|| {
+        window
+            .reset_after_seconds
+            .filter(|value| *value >= 0)
+            .map(|value| now + value)
+    });
 
     Some(UsageWindow {
         used_percent,
@@ -352,6 +348,9 @@ mod tests {
     fn extracts_account_id_from_jwt() {
         let payload = URL_SAFE_NO_PAD.encode(r#"{"chatgpt_account_id":"acct_test"}"#);
         let token = format!("header.{payload}.signature");
-        assert_eq!(jwt_claim(&token, "chatgpt_account_id").as_deref(), Some("acct_test"));
+        assert_eq!(
+            jwt_claim(&token, "chatgpt_account_id").as_deref(),
+            Some("acct_test")
+        );
     }
 }
