@@ -3,14 +3,13 @@ use std::{ptr::null, thread, time::Duration};
 use windows_sys::Win32::{
     Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE},
     System::Threading::CreateMutexW,
-    UI::WindowsAndMessaging::{
-        FindWindowW, IsWindowVisible, PostMessageW, SetForegroundWindow, WM_APP, WM_LBUTTONUP,
-    },
+    UI::WindowsAndMessaging::{FindWindowW, PostMessageW},
 };
+
+use crate::windows_app::ACTIVATE_EXISTING_MESSAGE;
 
 const MUTEX_NAME: &str = "Local\\CodexBarWin.SingleInstance";
 const WINDOW_CLASS_NAME: &str = "CodexBarWinPopup";
-const WM_TRAY: u32 = WM_APP + 1;
 const FIND_RETRY_COUNT: usize = 20;
 const FIND_RETRY_DELAY: Duration = Duration::from_millis(50);
 
@@ -56,13 +55,10 @@ unsafe fn activate_existing_instance() {
     for _ in 0..FIND_RETRY_COUNT {
         let hwnd = FindWindowW(class_name.as_ptr(), null());
         if !hwnd.is_null() {
-            if IsWindowVisible(hwnd) != 0 {
-                SetForegroundWindow(hwnd);
-            } else {
-                // Reuse the already-tested tray-left-click path so positioning,
-                // refresh throttling, and the 8-second auto-hide behavior stay identical.
-                PostMessageW(hwnd, WM_TRAY, 0, WM_LBUTTONUP as isize);
-            }
+            // Ask the primary process to reveal/foreground itself. Keeping the
+            // activation logic in the primary avoids coupling a second launch
+            // to tray-click toggle/deactivation ordering.
+            PostMessageW(hwnd, ACTIVATE_EXISTING_MESSAGE, 0, 0);
             return;
         }
         thread::sleep(FIND_RETRY_DELAY);
