@@ -1,5 +1,6 @@
 use windows::{
     core::PCWSTR,
+    UI::ViewManagement::{UIColorType, UISettings},
     Win32::{
         Foundation::HWND,
         Graphics::{
@@ -42,6 +43,40 @@ pub struct RenderModel<'a> {
 pub struct Theme {
     pub dark: bool,
     pub accent_rgb: (u8, u8, u8),
+    pub acrylic: bool,
+}
+
+pub fn system_theme(
+    fallback_dark: bool,
+    fallback_accent: (u8, u8, u8),
+    acrylic: bool,
+) -> Theme {
+    let mut dark = fallback_dark;
+    let mut accent_rgb = fallback_accent;
+
+    if let Ok(settings) = UISettings::new() {
+        if let Ok(background) = settings.GetColorValue(UIColorType::Background) {
+            dark = u16::from(background.R) + u16::from(background.G) + u16::from(background.B) < 384;
+        }
+
+        // WinUI's AccentFillColorDefaultBrush resolves to SystemAccentColorLight2 in
+        // dark mode and SystemAccentColorDark1 in light mode. Query those exact system
+        // palette entries instead of approximating an accent shade ourselves.
+        let accent_type = if dark {
+            UIColorType::AccentLight2
+        } else {
+            UIColorType::AccentDark1
+        };
+        if let Ok(accent) = settings.GetColorValue(accent_type) {
+            accent_rgb = (accent.R, accent.G, accent.B);
+        }
+    }
+
+    Theme {
+        dark,
+        accent_rgb,
+        acrylic,
+    }
 }
 
 pub struct FluentRenderer {
@@ -81,6 +116,8 @@ impl FluentRenderer {
                 .CreateHwndRenderTarget(&properties, &hwnd_properties)
                 .map_err(|error| format!("Direct2D render target: {error}"))?;
 
+            // Windows 11 typography: Segoe UI Variable; body 14 Regular, body-strong
+            // 14 Semibold, caption 12 Regular.
             let body = create_format(&dwrite, 14.0, false, false)?;
             let body_strong = create_format(&dwrite, 14.0, true, false)?;
             let body_right = create_format(&dwrite, 14.0, false, true)?;
@@ -98,21 +135,14 @@ impl FluentRenderer {
         }
     }
 
-    pub fn resize(&self, width: u32, height: u32) {
-        unsafe {
-            let _ = self.target.Resize(&D2D_SIZE_U { width, height });
-        }
-    }
-
     pub fn draw(&self, model: &RenderModel<'_>, theme: Theme, width: f32, height: f32) -> Result<(), String> {
         let palette = Palette::for_theme(theme);
 
         unsafe {
             self.target.BeginDraw();
-            let transparent = rgba(0, 0, 0, 0);
-            self.target.Clear(Some(&transparent));
+            self.target.Clear(Some(&rgba(0, 0, 0, 0)));
 
-            let surface_fill = self.brush(palette.layer_on_acrylic)?;
+            let surface_fill = self.brush(palette.surface_fill)?;
             let surface_stroke = self.brush(palette.surface_stroke)?;
             let primary = self.brush(palette.text_primary)?;
             let secondary = self.brush(palette.text_secondary)?;
@@ -121,8 +151,7 @@ impl FluentRenderer {
             let accent = self.brush(palette.accent)?;
             let danger = self.brush(palette.critical)?;
 
-            // WinUI OverlayCornerRadius = 8 epx. The half-pixel inset keeps the 1px flyout
-            // surface stroke crisp while letting DWM own the outer window geometry.
+            // WinUI OverlayCornerRadius = 8 epx for transient flyout/overlay surfaces.
             let surface = D2D1_ROUNDED_RECT {
                 rect: rect(0.5, 0.5, width - 0.5, height - 0.5),
                 radiusX: 8.0,
@@ -131,7 +160,7 @@ impl FluentRenderer {
             self.target.FillRoundedRectangle(&surface, &surface_fill);
             self.target.DrawRoundedRectangle(&surface, &surface_stroke, 1.0, None);
 
-            // WinUI content gutters: 16 epx from the surface edge.
+            // Windows content gutter = 16 epx.
             draw_text(&self.target, "Codex Usage", &self.body_strong, &primary, rect(16.0, 12.0, 188.0, 34.0));
             draw_text(
                 &self.target,
@@ -233,8 +262,8 @@ unsafe fn draw_row(
     draw_text(target, row.label, body, primary, rect(16.0, y, 150.0, y + 20.0));
     draw_text(target, row.value, body_right, primary, rect(150.0, y, width - 16.0, y + 20.0));
 
-    // Current WinUI ProgressBar resources:
-    // MinHeight 3, TrackHeight 1, indicator radius 1.5, track radius 0.5.
+    // Current Microsoft.UI.Xaml ProgressBar resources:
+    // MinHeight=3, TrackHeight=1, indicator radius=1.5, track radius=0.5.
     let left = 16.0;
     let right = width - 16.0;
     let progress_y = y + 27.0;
@@ -296,7 +325,7 @@ struct Palette {
     text_primary: D2D1_COLOR_F,
     text_secondary: D2D1_COLOR_F,
     text_tertiary: D2D1_COLOR_F,
-    layer_on_acrylic: D2D1_COLOR_F,
+    surface_fill: D2D1_COLOR_F,
     surface_stroke: D2D1_COLOR_F,
     progress_track: D2D1_COLOR_F,
     accent: D2D1_COLOR_F,
@@ -312,7 +341,7 @@ impl Palette {
                 text_primary: rgba(255, 255, 255, 255),
                 text_secondary: rgba(255, 255, 255, 0xC5),
                 text_tertiary: rgba(255, 255, 255, 0x87),
-                layer_on_acrylic: rgba(255, 255, 255, 0x09),
+                surface_fill: if theme.acrylic { rgba(255, 255, 255, 0x09) } else { rgba(32, 32, 32, 255) },
                 surface_stroke: rgba(0, 0, 0, 0x33),
                 progress_track: rgba(255, 255, 255, 0x8B),
                 accent: rgba(r, g, b, 255),
@@ -324,7 +353,7 @@ impl Palette {
                 text_primary: rgba(0, 0, 0, 0xE4),
                 text_secondary: rgba(0, 0, 0, 0x9E),
                 text_tertiary: rgba(0, 0, 0, 0x72),
-                layer_on_acrylic: rgba(255, 255, 255, 0x40),
+                surface_fill: if theme.acrylic { rgba(255, 255, 255, 0x40) } else { rgba(243, 243, 243, 255) },
                 surface_stroke: rgba(0, 0, 0, 0x0F),
                 progress_track: rgba(0, 0, 0, 0x72),
                 accent: rgba(r, g, b, 255),
