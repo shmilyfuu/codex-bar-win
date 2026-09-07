@@ -10,6 +10,8 @@ on:
 jobs:
   windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +21,26 @@ jobs:
       - name: Test
         run: cargo test
 
+      - name: Commit generated Cargo.lock once
+        if: github.event_name == 'pull_request' && github.head_ref == 'mvp-tray-usage'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          git ls-files --error-unmatch Cargo.lock 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Cargo.lock is already tracked."
+            exit 0
+          }
+
+          $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes("Cargo.lock"))
+          $payload = @{
+            message = "build: lock release dependencies"
+            content = $content
+            branch = "${{ github.head_ref }}"
+          } | ConvertTo-Json -Compress
+          $payload | gh api --method PUT "/repos/${{ github.repository }}/contents/Cargo.lock" --input -
+
       - name: Build release
         run: cargo build --release
 
@@ -27,13 +49,6 @@ jobs:
         with:
           name: codex-bar-win-x64-portable
           path: target/release/codex-bar-win.exe
-          if-no-files-found: error
-
-      - name: Upload Cargo lock for release review
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-lock-review
-          path: Cargo.lock
           if-no-files-found: error
 
   release:
