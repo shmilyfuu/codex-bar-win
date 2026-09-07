@@ -25,7 +25,7 @@ All tray-menu preferences are intentionally in-memory only for now, so restartin
 ## Build
 
 ```powershell
-cargo build --release
+cargo build --release --locked
 ```
 
 The executable is created at:
@@ -34,4 +34,4 @@ The executable is created at:
 target\release\codex-bar-win.exe
 ```
 
-GitHub Actions runs tests, builds the portable executable, and uploads it as the `codex-bar-win-x64-portable` artifact. A successful push to `main` publishes the Cargo package version as a GitHub Release when that version has not already been released.
+GitHub Actions checks formatting and Clippy, runs locked tests, builds the locked portable executable, and uploads it as the `codex-bar-win-x64-portable` artifact. A successful push to `main` publishes the Cargo package version as a GitHub Release when that version has not already been released.
