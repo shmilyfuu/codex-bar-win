@@ -337,7 +337,7 @@ unsafe fn paint_popup(hwnd: HWND) {
     DeleteObject(background);
 
     let old_font = SelectObject(hdc, GetStockObject(DEFAULT_GUI_FONT));
-    SetBkMode(hdc, TRANSPARENT);
+    SetBkMode(hdc, TRANSPARENT as i32);
     SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
 
     draw_text(hdc, "Codex Usage", 16, 12, 198, 34, DT_LEFT | DT_VCENTER);
