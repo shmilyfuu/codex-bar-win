@@ -7,13 +7,26 @@ mod fluent_renderer;
 #[cfg(target_os = "windows")]
 mod menu_renderer;
 #[cfg(target_os = "windows")]
+mod single_instance;
+#[cfg(target_os = "windows")]
 mod windows_app;
 
 #[cfg(target_os = "windows")]
 fn main() {
+    let instance_guard = match single_instance::acquire_or_activate_existing() {
+        Ok(Some(guard)) => guard,
+        Ok(None) => return,
+        Err(error) => {
+            windows_app::show_fatal_error(&error);
+            return;
+        }
+    };
+
     if let Err(error) = windows_app::run() {
         windows_app::show_fatal_error(&error);
     }
+
+    drop(instance_guard);
 }
 
 #[cfg(not(target_os = "windows"))]
