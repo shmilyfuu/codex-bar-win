@@ -72,7 +72,7 @@ fn render_icon(size: u32) -> Vec<u8> {
 }
 
 fn meter_glyph(x: f32, y: f32, size: f32) -> bool {
-    let widths = size * 0.105;
+    let width = size * 0.105;
     let bottom = size * 0.72;
     let bars = [
         (size * 0.315, size * 0.455),
@@ -81,9 +81,9 @@ fn meter_glyph(x: f32, y: f32, size: f32) -> bool {
     ];
 
     bars.into_iter().any(|(center_x, top)| {
-        let left = center_x - widths / 2.0;
-        let right = center_x + widths / 2.0;
-        rounded_rect(x, y, left, top, right, bottom, widths / 2.0)
+        let left = center_x - width / 2.0;
+        let right = center_x + width / 2.0;
+        rounded_rect(x, y, left, top, right, bottom, width * 0.48)
     })
 }
 
@@ -92,9 +92,17 @@ fn rounded_rect(x: f32, y: f32, left: f32, top: f32, right: f32, bottom: f32, ra
         return false;
     }
 
-    let cx = x.clamp(left + radius, right - radius);
-    let cy = y.clamp(top + radius, bottom - radius);
-    let dx = x - cx;
-    let dy = y - cy;
-    dx * dx + dy * dy <= radius * radius
+    let half_width = (right - left) * 0.5;
+    let half_height = (bottom - top) * 0.5;
+    let radius = radius.max(0.0).min(half_width).min(half_height);
+    let center_x = (left + right) * 0.5;
+    let center_y = (top + bottom) * 0.5;
+    let inner_half_width = half_width - radius;
+    let inner_half_height = half_height - radius;
+    let dx = (x - center_x).abs() - inner_half_width;
+    let dy = (y - center_y).abs() - inner_half_height;
+    let outside_x = dx.max(0.0);
+    let outside_y = dy.max(0.0);
+
+    outside_x * outside_x + outside_y * outside_y <= radius * radius
 }
