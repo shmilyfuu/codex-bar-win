@@ -27,20 +27,25 @@ fn main() {
 }
 
 fn render_icon(size: u32) -> Vec<u8> {
+    // Small tray icons expose aliasing very easily. Render coverage at 8x8 samples per
+    // output pixel, then alpha-composite the white meter over the dark tile. The previous
+    // renderer switched any partially-covered glyph pixel straight to white, which made
+    // diagonal/rounded edges visibly jagged at 16-24 px.
+    const SAMPLES: u32 = 8;
     let mut rgba = vec![0_u8; (size * size * 4) as usize];
     let scale = size as f32;
-    let inset = scale * 0.055;
-    let radius = scale * 0.245;
+    let inset = scale * 0.0625;
+    let radius = scale * 0.23;
 
     for y in 0..size {
         for x in 0..size {
             let mut background_samples = 0_u32;
             let mut glyph_samples = 0_u32;
 
-            for sy in 0..4 {
-                for sx in 0..4 {
-                    let px = x as f32 + (sx as f32 + 0.5) / 4.0;
-                    let py = y as f32 + (sy as f32 + 0.5) / 4.0;
+            for sy in 0..SAMPLES {
+                for sx in 0..SAMPLES {
+                    let px = x as f32 + (sx as f32 + 0.5) / SAMPLES as f32;
+                    let py = y as f32 + (sy as f32 + 0.5) / SAMPLES as f32;
                     if rounded_rect(px, py, inset, inset, scale - inset, scale - inset, radius) {
                         background_samples += 1;
                     }
@@ -50,21 +55,24 @@ fn render_icon(size: u32) -> Vec<u8> {
                 }
             }
 
+            let total = (SAMPLES * SAMPLES) as f32;
+            let bg = background_samples as f32 / total;
+            let fg = glyph_samples as f32 / total;
             let index = ((y * size + x) * 4) as usize;
-            let bg_alpha = (background_samples * 255 / 16) as u8;
-            let glyph_alpha = (glyph_samples * 255 / 16) as u8;
 
-            if glyph_alpha > 0 {
-                rgba[index] = 245;
-                rgba[index + 1] = 247;
-                rgba[index + 2] = 250;
-                rgba[index + 3] = glyph_alpha.max(bg_alpha);
-            } else if bg_alpha > 0 {
-                rgba[index] = 20;
-                rgba[index + 1] = 23;
-                rgba[index + 2] = 28;
-                rgba[index + 3] = bg_alpha;
+            // Straight-alpha composite: foreground over the rounded tile.
+            let out_a = fg + bg * (1.0 - fg);
+            if out_a <= f32::EPSILON {
+                continue;
             }
+
+            let bg_rgb = [20.0_f32, 23.0, 28.0];
+            let fg_rgb = [245.0_f32, 247.0, 250.0];
+            for channel in 0..3 {
+                let premul = fg_rgb[channel] * fg + bg_rgb[channel] * bg * (1.0 - fg);
+                rgba[index + channel] = (premul / out_a).round().clamp(0.0, 255.0) as u8;
+            }
+            rgba[index + 3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
         }
     }
 
@@ -72,18 +80,19 @@ fn render_icon(size: u32) -> Vec<u8> {
 }
 
 fn meter_glyph(x: f32, y: f32, size: f32) -> bool {
-    let width = size * 0.105;
-    let bottom = size * 0.72;
+    // Geometry is intentionally chunky enough to remain legible in the 16 px tray slot.
+    let width = size * 0.125;
+    let bottom = size * 0.735;
     let bars = [
-        (size * 0.315, size * 0.455),
-        (size * 0.500, size * 0.350),
+        (size * 0.315, size * 0.485),
+        (size * 0.500, size * 0.365),
         (size * 0.685, size * 0.245),
     ];
 
     bars.into_iter().any(|(center_x, top)| {
         let left = center_x - width / 2.0;
         let right = center_x + width / 2.0;
-        rounded_rect(x, y, left, top, right, bottom, width / 2.0)
+        rounded_rect(x, y, left, top, right, bottom, width * 0.42)
     })
 }
 
@@ -101,8 +110,6 @@ fn rounded_rect(x: f32, y: f32, left: f32, top: f32, right: f32, bottom: f32, ra
     let inner_top = top + radius;
     let inner_bottom = bottom - radius;
 
-    // At tiny icon sizes floating-point rounding can make the two inner bounds cross by
-    // less than a micro-pixel. Use the geometric midpoint instead of f32::clamp in that case.
     let cx = if inner_left <= inner_right {
         x.clamp(inner_left, inner_right)
     } else {
