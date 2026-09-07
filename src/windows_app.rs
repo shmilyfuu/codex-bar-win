@@ -55,6 +55,7 @@ const TRAY_ID: u32 = 1;
 const WM_TRAY: u32 = WM_APP + 1;
 const WM_USAGE_UPDATED: u32 = WM_APP + 2;
 const WM_CREDITS_UPDATED: u32 = WM_APP + 3;
+pub const ACTIVATE_EXISTING_MESSAGE: u32 = WM_APP + 10;
 const TIMER_REFRESH: usize = 1;
 const TIMER_HIDE: usize = 2;
 const HIDE_DELAY_MS: u32 = 8 * 1000;
@@ -89,6 +90,7 @@ static REFRESH_MINUTES: AtomicU32 = AtomicU32::new(5);
 static LAST_USAGE_REQUEST: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 static LAST_CREDITS_REQUEST: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 static LAST_POPUP_DEACTIVATE: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+static LAST_MENU_DEACTIVATE: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 
 thread_local! {
     static RENDERER: RefCell<Option<FluentRenderer>> = const { RefCell::new(None) };
@@ -103,6 +105,7 @@ pub fn run() -> Result<(), String> {
     let _ = LAST_USAGE_REQUEST.set(Mutex::new(None));
     let _ = LAST_CREDITS_REQUEST.set(Mutex::new(None));
     let _ = LAST_POPUP_DEACTIVATE.set(Mutex::new(None));
+    let _ = LAST_MENU_DEACTIVATE.set(Mutex::new(None));
 
     unsafe {
         SetProcessDPIAware();
@@ -246,6 +249,21 @@ unsafe extern "system" fn window_proc(
             }
             0
         }
+        ACTIVATE_EXISTING_MESSAGE => {
+            clear_deactivate_marker(&LAST_POPUP_DEACTIVATE);
+            clear_deactivate_marker(&LAST_MENU_DEACTIVATE);
+            if let Some(menu) = menu_hwnd() {
+                ShowWindow(menu, SW_HIDE);
+            }
+
+            if IsWindowVisible(hwnd) != 0 {
+                SetForegroundWindow(hwnd);
+                SetTimer(hwnd, TIMER_HIDE, HIDE_DELAY_MS, None);
+            } else {
+                show_popup(hwnd);
+            }
+            0
+        }
         WM_TIMER => {
             match _wparam {
                 TIMER_REFRESH => {
@@ -268,7 +286,7 @@ unsafe extern "system" fn window_proc(
         WM_ACTIVATE => {
             if (_wparam & 0xffff) as u32 == WA_INACTIVE && IsWindowVisible(hwnd) != 0 {
                 KillTimer(hwnd, TIMER_HIDE);
-                mark_popup_deactivated();
+                mark_deactivated(&LAST_POPUP_DEACTIVATE);
                 ShowWindow(hwnd, SW_HIDE);
             }
             0
@@ -336,11 +354,13 @@ unsafe extern "system" fn menu_window_proc(
             0
         }
         WM_RBUTTONUP => {
+            clear_deactivate_marker(&LAST_MENU_DEACTIVATE);
             ShowWindow(hwnd, SW_HIDE);
             0
         }
         WM_ACTIVATE => {
-            if (wparam & 0xffff) as u32 == WA_INACTIVE {
+            if (wparam & 0xffff) as u32 == WA_INACTIVE && IsWindowVisible(hwnd) != 0 {
+                mark_deactivated(&LAST_MENU_DEACTIVATE);
                 ShowWindow(hwnd, SW_HIDE);
                 MENU_HOVER.with(|hover| *hover.borrow_mut() = None);
             }
@@ -398,9 +418,11 @@ unsafe fn remove_tray_icon(hwnd: HWND) {
 }
 
 unsafe fn toggle_popup(hwnd: HWND) {
+    clear_deactivate_marker(&LAST_MENU_DEACTIVATE);
+
     if IsWindowVisible(hwnd) != 0 {
         KillTimer(hwnd, TIMER_HIDE);
-        clear_popup_deactivate_marker();
+        clear_deactivate_marker(&LAST_POPUP_DEACTIVATE);
         ShowWindow(hwnd, SW_HIDE);
         return;
     }
@@ -408,7 +430,7 @@ unsafe fn toggle_popup(hwnd: HWND) {
     // Clicking the tray icon while the popup owns focus first causes WA_INACTIVE.
     // The shell then delivers WM_TRAY. Treat that very recent deactivate as the
     // same toggle gesture instead of reopening the popup immediately.
-    if consume_recent_popup_deactivate() {
+    if consume_recent_deactivate(&LAST_POPUP_DEACTIVATE) {
         return;
     }
 
@@ -419,7 +441,8 @@ unsafe fn toggle_popup(hwnd: HWND) {
 }
 
 unsafe fn show_popup(hwnd: HWND) {
-    clear_popup_deactivate_marker();
+    clear_deactivate_marker(&LAST_POPUP_DEACTIVATE);
+    clear_deactivate_marker(&LAST_MENU_DEACTIVATE);
 
     let mut cursor = POINT::default();
     GetCursorPos(&mut cursor);
@@ -456,14 +479,22 @@ unsafe fn show_popup(hwnd: HWND) {
 }
 
 unsafe fn show_context_menu(main_hwnd: HWND) {
-    clear_popup_deactivate_marker();
+    clear_deactivate_marker(&LAST_POPUP_DEACTIVATE);
 
     let Some(menu_hwnd) = menu_hwnd() else {
         return;
     };
 
     if IsWindowVisible(menu_hwnd) != 0 {
+        clear_deactivate_marker(&LAST_MENU_DEACTIVATE);
         ShowWindow(menu_hwnd, SW_HIDE);
+        return;
+    }
+
+    // The shell can deactivate the menu before it delivers the second tray
+    // right-click callback. Consume that very recent deactivate as the same
+    // gesture instead of immediately reopening the menu.
+    if consume_recent_deactivate(&LAST_MENU_DEACTIVATE) {
         return;
     }
 
@@ -487,6 +518,7 @@ unsafe fn show_context_menu(main_hwnd: HWND) {
     let max_y = (work.bottom - MENU_HEIGHT - 8).max(min_y);
     let y = (cursor.y - MENU_HEIGHT - 8).clamp(min_y, max_y);
 
+    clear_deactivate_marker(&LAST_MENU_DEACTIVATE);
     MENU_HOVER.with(|hover| *hover.borrow_mut() = None);
     SetWindowPos(
         menu_hwnd,
@@ -503,6 +535,8 @@ unsafe fn show_context_menu(main_hwnd: HWND) {
 }
 
 unsafe fn apply_menu_action(menu_hwnd: HWND, item: MenuItem) {
+    clear_deactivate_marker(&LAST_MENU_DEACTIVATE);
+
     let Some(main_hwnd) = main_hwnd() else {
         ShowWindow(menu_hwnd, SW_HIDE);
         return;
@@ -622,8 +656,8 @@ fn mark_request_due(slot: &OnceLock<Mutex<Option<Instant>>>, min_interval: Durat
     true
 }
 
-fn mark_popup_deactivated() {
-    let Some(slot) = LAST_POPUP_DEACTIVATE.get() else {
+fn mark_deactivated(slot: &OnceLock<Mutex<Option<Instant>>>) {
+    let Some(slot) = slot.get() else {
         return;
     };
     if let Ok(mut last) = slot.lock() {
@@ -631,8 +665,8 @@ fn mark_popup_deactivated() {
     }
 }
 
-fn consume_recent_popup_deactivate() -> bool {
-    let Some(slot) = LAST_POPUP_DEACTIVATE.get() else {
+fn consume_recent_deactivate(slot: &OnceLock<Mutex<Option<Instant>>>) -> bool {
+    let Some(slot) = slot.get() else {
         return false;
     };
     let Ok(mut last) = slot.lock() else {
@@ -646,8 +680,8 @@ fn consume_recent_popup_deactivate() -> bool {
     recent
 }
 
-fn clear_popup_deactivate_marker() {
-    let Some(slot) = LAST_POPUP_DEACTIVATE.get() else {
+fn clear_deactivate_marker(slot: &OnceLock<Mutex<Option<Instant>>>) {
+    let Some(slot) = slot.get() else {
         return;
     };
     if let Ok(mut last) = slot.lock() {
