@@ -15,8 +15,8 @@ use windows_sys::Win32::{
     Graphics::{
         Dwm::DwmSetWindowAttribute,
         Gdi::{
-            BeginPaint, EndPaint, GetClientRect, GetMonitorInfoW, GetSysColor, InvalidateRect,
-            MonitorFromPoint, COLOR_HIGHLIGHT, MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT,
+            BeginPaint, EndPaint, GetMonitorInfoW, GetSysColor, InvalidateRect, MonitorFromPoint,
+            COLOR_HIGHLIGHT, MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT,
         },
     },
     System::{
@@ -30,8 +30,8 @@ use windows_sys::Win32::{
         },
         WindowsAndMessaging::{
             AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
-            DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW, KillTimer, LoadCursorW,
-            LoadIconW, MessageBoxW, PostMessageW, PostQuitMessage, RegisterClassW,
+            DestroyWindow, DispatchMessageW, GetClientRect, GetCursorPos, GetMessageW, KillTimer,
+            LoadCursorW, LoadIconW, MessageBoxW, PostMessageW, PostQuitMessage, RegisterClassW,
             SetForegroundWindow, SetProcessDPIAware, SetTimer, SetWindowPos, ShowWindow,
             TrackPopupMenu, TranslateMessage, WNDCLASSW, HWND_TOPMOST, IDC_ARROW, IDI_APPLICATION,
             MB_ICONERROR, MB_OK, MF_SEPARATOR, MF_STRING, MSG, SW_HIDE, SW_SHOW, SWP_SHOWWINDOW,
@@ -60,8 +60,7 @@ const PANEL_HEIGHT: i32 = 198;
 const CMD_REFRESH: usize = 1001;
 const CMD_EXIT: usize = 1002;
 
-// DWMWINDOWATTRIBUTE and companion enum values from dwmapi.h. Keeping these local avoids
-// taking a WinUI/Windows App SDK dependency while still using the documented DWM contract.
+// Documented dwmapi.h enum values. We use only Windows' own DWM APIs; no WinUI runtime is linked.
 const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
 const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
 const DWMWA_SYSTEMBACKDROP_TYPE: u32 = 38;
@@ -106,7 +105,6 @@ pub fn run() -> Result<(), String> {
             lpszClassName: class_name.as_ptr(),
             ..Default::default()
         };
-
         if RegisterClassW(&window_class) == 0 {
             return Err("Cannot register popup window class".to_string());
         }
@@ -126,25 +124,21 @@ pub fn run() -> Result<(), String> {
             instance,
             null(),
         );
-
         if hwnd.is_null() {
             return Err("Cannot create popup window".to_string());
         }
 
         let acrylic = apply_fluent_window_attributes(hwnd);
         ACRYLIC_ENABLED.store(acrylic, Ordering::Release);
-        RENDERER.with(|renderer| {
-            *renderer.borrow_mut() = Some(
-                FluentRenderer::new(hwnd as isize, PANEL_WIDTH as u32, PANEL_HEIGHT as u32)
-                    .expect("Direct2D renderer initialization was checked below"),
-            );
-        });
-        // Re-create without panic so startup failures are surfaced through the existing fatal dialog.
-        let renderer_ok = RENDERER.with(|renderer| renderer.borrow().is_some());
-        if !renderer_ok {
-            DestroyWindow(hwnd);
-            return Err("Cannot initialize Direct2D renderer".to_string());
-        }
+
+        let renderer = match FluentRenderer::new(hwnd as isize, PANEL_WIDTH as u32, PANEL_HEIGHT as u32) {
+            Ok(renderer) => renderer,
+            Err(error) => {
+                DestroyWindow(hwnd);
+                return Err(error);
+            }
+        };
+        RENDERER.with(|slot| *slot.borrow_mut() = Some(renderer));
 
         add_tray_icon(hwnd, app_icon)?;
         SetTimer(hwnd, TIMER_REFRESH, REFRESH_INTERVAL_MS, None);
@@ -170,12 +164,7 @@ pub fn show_fatal_error(message: &str) {
     }
 }
 
-unsafe extern "system" fn window_proc(
-    hwnd: HWND,
-    message: u32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
+unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match message {
         WM_TRAY => {
             match lparam as u32 {
@@ -242,7 +231,7 @@ unsafe extern "system" fn window_proc(
 }
 
 unsafe fn load_app_icon(instance: *mut core::ffi::c_void) -> *mut core::ffi::c_void {
-    // winresource embeds the application icon as resource ID 1.
+    // winresource embeds the generated icon as resource ID 1.
     let embedded = LoadIconW(instance, 1usize as *const u16);
     if embedded.is_null() {
         LoadIconW(null_mut(), IDI_APPLICATION)
@@ -264,7 +253,6 @@ unsafe fn add_tray_icon(hwnd: HWND, app_icon: *mut core::ffi::c_void) -> Result<
     if Shell_NotifyIconW(NIM_ADD, &icon) == 0 {
         return Err("Cannot add tray icon".to_string());
     }
-
     Ok(())
 }
 
@@ -293,15 +281,7 @@ unsafe fn show_popup(hwnd: HWND) {
     let x = (cursor.x - PANEL_WIDTH / 2).clamp(min_x, max_x);
     let y = (work.bottom - PANEL_HEIGHT - 10).max(work.top + 8);
 
-    SetWindowPos(
-        hwnd,
-        HWND_TOPMOST,
-        x,
-        y,
-        PANEL_WIDTH,
-        PANEL_HEIGHT,
-        SWP_SHOWWINDOW,
-    );
+    SetWindowPos(hwnd, HWND_TOPMOST, x, y, PANEL_WIDTH, PANEL_HEIGHT, SWP_SHOWWINDOW);
     ShowWindow(hwnd, SW_SHOW);
     SetForegroundWindow(hwnd);
     SetTimer(hwnd, TIMER_HIDE, HIDE_DELAY_MS, None);
@@ -334,7 +314,6 @@ unsafe fn show_context_menu(hwnd: HWND) {
         hwnd,
         null(),
     ) as usize;
-
     DestroyMenu(menu);
 
     match command {
@@ -355,7 +334,6 @@ fn refresh_usage_async(hwnd: HWND) {
     let hwnd_value = hwnd as isize;
     thread::spawn(move || {
         let result = usage::fetch_usage();
-
         if let Some(state) = STATE.get() {
             if let Ok(mut state) = state.lock() {
                 match result {
@@ -363,9 +341,7 @@ fn refresh_usage_async(hwnd: HWND) {
                         state.snapshot = Some(snapshot);
                         state.last_error = None;
                     }
-                    Err(error) => {
-                        state.last_error = Some(error);
-                    }
+                    Err(error) => state.last_error = Some(error),
                 }
             }
         }
@@ -400,9 +376,7 @@ unsafe fn paint_popup(hwnd: HWND) {
         "等待更新"
     };
 
-    let primary = row_strings(
-        state.snapshot.as_ref().and_then(|snapshot| snapshot.primary.as_ref()),
-    );
+    let primary = row_strings(state.snapshot.as_ref().and_then(|snapshot| snapshot.primary.as_ref()));
     let secondary = row_strings(
         state
             .snapshot
@@ -439,18 +413,18 @@ unsafe fn paint_popup(hwnd: HWND) {
         ACRYLIC_ENABLED.load(Ordering::Acquire),
     );
 
-    RENDERER.with(|renderer| {
-        let mut renderer = renderer.borrow_mut();
-        let result = renderer
+    RENDERER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let result = slot
             .as_ref()
             .ok_or_else(|| "Direct2D renderer unavailable".to_string())
             .and_then(|renderer| renderer.draw(&model, theme, width, height));
 
         if result.is_err() {
-            // Device loss can invalidate an HWND render target. Re-create it once and retry.
+            // Recreate once after device loss.
             if let Ok(replacement) = FluentRenderer::new(hwnd as isize, width as u32, height as u32) {
-                *renderer = Some(replacement);
-                if let Some(renderer) = renderer.as_ref() {
+                *slot = Some(replacement);
+                if let Some(renderer) = slot.as_ref() {
                     let _ = renderer.draw(&model, theme, width, height);
                 }
             }
@@ -494,18 +468,16 @@ fn footer_text(state: &DisplayState) -> String {
 }
 
 unsafe fn apply_fluent_window_attributes(hwnd: HWND) -> bool {
-    let dark = apps_use_dark_theme();
-    let dark_mode: i32 = i32::from(dark);
+    let dark_mode = i32::from(apps_use_dark_theme());
     let _ = set_dwm_i32(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, dark_mode);
     let _ = set_dwm_i32(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND);
 
-    // Windows 11 22H2+: documented transient-window backdrop = Desktop/Background Acrylic.
+    // Windows 11 22H2+: transient-window backdrop maps to Desktop/Background Acrylic.
     let acrylic = set_dwm_i32(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW);
 
-    // Windows 11 build 26100+: allow our premultiplied-alpha D2D target to reveal the system
-    // backdrop. Older builds simply reject this attribute and fall back to a solid WinUI color.
-    let alpha_enabled: i32 = 1;
-    let alpha = set_dwm_i32(hwnd, DWMWA_REDIRECTIONBITMAP_ALPHA, alpha_enabled);
+    // Windows 11 build 26100+: let the premultiplied-alpha D2D target reveal that backdrop.
+    // On older builds this attribute fails harmlessly and the renderer uses WinUI's solid fallback.
+    let alpha = set_dwm_i32(hwnd, DWMWA_REDIRECTIONBITMAP_ALPHA, 1);
     acrylic && alpha
 }
 
@@ -562,8 +534,7 @@ fn wide(value: &str) -> Vec<u16> {
 }
 
 fn copy_wide_fixed<const N: usize>(value: &str, target: &mut [u16; N]) {
-    let encoded = value.encode_utf16().take(N.saturating_sub(1));
-    for (index, unit) in encoded.enumerate() {
+    for (index, unit) in value.encode_utf16().take(N.saturating_sub(1)).enumerate() {
         target[index] = unit;
     }
 }
