@@ -9,10 +9,11 @@ use std::{
 use chrono::{Local, TimeZone};
 use gpui_kit::{
     component::{progress::Progress, ActiveTheme as _, Root, Sizable as _, Theme, ThemeColor},
+    prelude::FluentBuilder,
     AppContext as _, AsyncApp, Bounds, Context, IntoElement, ParentElement as _, Render,
     Styled as _, WeakEntity, Window, WindowBounds, WindowKind, WindowOptions, div, px, size,
 };
-use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
+use raw_window_handle::RawWindowHandle;
 use windows_sys::Win32::Foundation::HWND;
 
 use crate::{
@@ -343,8 +344,7 @@ fn start_refresh(view: WeakEntity<UsageView>, cx: &mut AsyncApp) {
 }
 
 fn raw_hwnd(window: &Window) -> Result<HWND, String> {
-    let handle = window
-        .window_handle()
+    let handle = raw_window_handle::HasWindowHandle::window_handle(window)
         .map_err(|error| format!("Cannot obtain native window handle: {error}"))?;
 
     match handle.as_raw() {
