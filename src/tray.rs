@@ -11,11 +11,11 @@ use windows_sys::Win32::{
         },
         WindowsAndMessaging::{
             AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, GetMonitorInfoW, LoadIconW,
-            MonitorFromPoint, SetForegroundWindow, SetWindowPos, ShowWindow, TrackPopupMenu,
-            HWND_TOPMOST, IDI_APPLICATION, MF_SEPARATOR, MF_STRING, MONITORINFO,
-            MONITOR_DEFAULTTONEAREST, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOSIZE, SWP_SHOWWINDOW,
-            TPM_RETURNCMD, TPM_RIGHTBUTTON, WA_INACTIVE, WM_ACTIVATE, WM_APP, WM_LBUTTONUP,
-            WM_NCDESTROY, WM_RBUTTONUP,
+            MessageBoxW, MonitorFromPoint, SetForegroundWindow, SetWindowPos, ShowWindow,
+            TrackPopupMenu, HWND_TOPMOST, IDI_APPLICATION, MB_ICONERROR, MB_OK, MF_SEPARATOR,
+            MF_STRING, MONITORINFO, MONITOR_DEFAULTTONEAREST, SW_HIDE, SW_SHOW, SWP_NOSIZE,
+            SWP_SHOWWINDOW, TPM_RETURNCMD, TPM_RIGHTBUTTON, WA_INACTIVE, WM_ACTIVATE, WM_APP,
+            WM_LBUTTONUP, WM_NCDESTROY, WM_RBUTTONUP,
         },
     },
 };
@@ -98,7 +98,7 @@ pub fn show_popup(hwnd: HWND) {
             0,
             SWP_NOSIZE | SWP_SHOWWINDOW,
         );
-        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        ShowWindow(hwnd, SW_SHOW);
         SetForegroundWindow(hwnd);
     }
 }
@@ -117,6 +117,19 @@ pub fn remove(hwnd: HWND) {
         icon.uID = TRAY_ID;
         Shell_NotifyIconW(NIM_DELETE, &icon);
         RemoveWindowSubclass(hwnd, Some(subclass_proc), SUBCLASS_ID);
+    }
+}
+
+pub fn show_error(message: &str) {
+    unsafe {
+        let title = wide("Codex Usage");
+        let message = wide(message);
+        MessageBoxW(
+            null_mut(),
+            message.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONERROR,
+        );
     }
 }
 
