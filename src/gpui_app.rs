@@ -8,8 +8,8 @@ use std::{
 
 use chrono::{Local, TimeZone};
 use gpui_kit::{
-    component::{progress::Progress, ActiveTheme as _, Root, Sizable as _, Theme},
-    App, AppContext as _, AsyncApp, Bounds, Context, IntoElement, ParentElement as _, Render,
+    component::{progress::Progress, ActiveTheme as _, Root, Sizable as _, Theme, ThemeColor},
+    AppContext as _, AsyncApp, Bounds, Context, IntoElement, ParentElement as _, Render,
     Styled as _, WeakEntity, Window, WindowBounds, WindowKind, WindowOptions, div, px, size,
 };
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
@@ -49,7 +49,7 @@ impl UsageView {
 
 impl Render for UsageView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = *cx.theme();
+        let colors = cx.theme().colors;
         let plan = self
             .snapshot
             .as_ref()
@@ -84,10 +84,10 @@ impl Render for UsageView {
             .flex_col()
             .gap_3()
             .p_4()
-            .bg(theme.background)
-            .text_color(theme.foreground)
+            .bg(colors.background)
+            .text_color(colors.foreground)
             .border_1()
-            .border_color(theme.border)
+            .border_color(colors.border)
             .child(
                 div()
                     .flex()
@@ -105,8 +105,8 @@ impl Render for UsageView {
                                         .px_2()
                                         .py_1()
                                         .rounded_md()
-                                        .bg(theme.secondary)
-                                        .text_color(theme.secondary_foreground)
+                                        .bg(colors.secondary)
+                                        .text_color(colors.secondary_foreground)
                                         .text_xs()
                                         .child(plan),
                                 )
@@ -116,9 +116,9 @@ impl Render for UsageView {
                         div()
                             .text_xs()
                             .text_color(if self.error.is_some() {
-                                theme.danger
+                                colors.danger
                             } else {
-                                theme.muted_foreground
+                                colors.muted_foreground
                             })
                             .child(status_text),
                     ),
@@ -129,7 +129,7 @@ impl Render for UsageView {
                 self.snapshot
                     .as_ref()
                     .and_then(|snapshot| snapshot.primary.as_ref()),
-                &theme,
+                colors,
             ))
             .child(usage_card(
                 "weekly-usage",
@@ -137,13 +137,13 @@ impl Render for UsageView {
                 self.snapshot
                     .as_ref()
                     .and_then(|snapshot| snapshot.secondary.as_ref()),
-                &theme,
+                colors,
             ))
             .child(
                 div()
                     .mt_auto()
                     .text_xs()
-                    .text_color(theme.muted_foreground)
+                    .text_color(colors.muted_foreground)
                     .child(footer),
             )
     }
@@ -153,7 +153,7 @@ fn usage_card(
     id: &'static str,
     label: &'static str,
     window: Option<&UsageWindow>,
-    theme: &gpui_kit::component::Theme,
+    colors: ThemeColor,
 ) -> impl IntoElement {
     let used = window.map(|window| window.used_percent as f32).unwrap_or(0.0);
     let value = window
@@ -178,9 +178,9 @@ fn usage_card(
         .px_3()
         .py_2()
         .rounded_lg()
-        .bg(theme.secondary)
+        .bg(colors.secondary)
         .border_1()
-        .border_color(theme.border)
+        .border_color(colors.border)
         .child(
             div()
                 .flex()
@@ -190,7 +190,7 @@ fn usage_card(
                 .child(
                     div()
                         .text_xs()
-                        .text_color(theme.secondary_foreground)
+                        .text_color(colors.secondary_foreground)
                         .child(value),
                 ),
         )
@@ -198,12 +198,12 @@ fn usage_card(
             Progress::new(id)
                 .value(used)
                 .small()
-                .color(theme.primary),
+                .color(colors.primary),
         )
         .child(
             div()
                 .text_xs()
-                .text_color(theme.muted_foreground)
+                .text_color(colors.muted_foreground)
                 .child(reset),
         )
 }
