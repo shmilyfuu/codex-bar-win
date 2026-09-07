@@ -2,6 +2,8 @@
 
 A small Windows tray utility for quickly viewing Codex / ChatGPT Work usage.
 
+> Unofficial community utility. Not affiliated with or endorsed by OpenAI. It relies on ChatGPT/Codex usage endpoints that may change over time.
+
 ## Current behavior
 
 - Runs from a single portable executable and does not create app-owned config, cache, or log files.
