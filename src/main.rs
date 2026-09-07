@@ -3,13 +3,13 @@
 mod usage;
 
 #[cfg(target_os = "windows")]
-mod windows_app;
+mod gpui_app;
+#[cfg(target_os = "windows")]
+mod tray;
 
 #[cfg(target_os = "windows")]
 fn main() {
-    if let Err(error) = windows_app::run() {
-        windows_app::show_fatal_error(&error);
-    }
+    gpui_app::run();
 }
 
 #[cfg(not(target_os = "windows"))]
