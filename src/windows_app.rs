@@ -61,7 +61,8 @@ const HIDE_DELAY_MS: u32 = 8 * 1000;
 const PANEL_WIDTH: i32 = 320;
 const PANEL_HEIGHT_BASE: i32 = 212;
 const PANEL_HEIGHT_CREDITS: i32 = 252;
-const USAGE_DEBOUNCE: Duration = Duration::from_secs(3);
+const USAGE_DEBOUNCE: Duration = Duration::from_secs(10);
+const TRAY_DEACTIVATE_TOGGLE_WINDOW: Duration = Duration::from_millis(750);
 const CREDITS_REFRESH_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
 const DISPLAY_REMAINING: u32 = 0;
@@ -87,6 +88,7 @@ static DISPLAY_MODE: AtomicU32 = AtomicU32::new(DISPLAY_REMAINING);
 static REFRESH_MINUTES: AtomicU32 = AtomicU32::new(5);
 static LAST_USAGE_REQUEST: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 static LAST_CREDITS_REQUEST: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+static LAST_POPUP_DEACTIVATE: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 
 thread_local! {
     static RENDERER: RefCell<Option<FluentRenderer>> = const { RefCell::new(None) };
@@ -100,6 +102,7 @@ pub fn run() -> Result<(), String> {
         .map_err(|_| "Application state is already initialized".to_string())?;
     let _ = LAST_USAGE_REQUEST.set(Mutex::new(None));
     let _ = LAST_CREDITS_REQUEST.set(Mutex::new(None));
+    let _ = LAST_POPUP_DEACTIVATE.set(Mutex::new(None));
 
     unsafe {
         SetProcessDPIAware();
@@ -265,6 +268,7 @@ unsafe extern "system" fn window_proc(
         WM_ACTIVATE => {
             if (_wparam & 0xffff) as u32 == WA_INACTIVE && IsWindowVisible(hwnd) != 0 {
                 KillTimer(hwnd, TIMER_HIDE);
+                mark_popup_deactivated();
                 ShowWindow(hwnd, SW_HIDE);
             }
             0
@@ -396,7 +400,15 @@ unsafe fn remove_tray_icon(hwnd: HWND) {
 unsafe fn toggle_popup(hwnd: HWND) {
     if IsWindowVisible(hwnd) != 0 {
         KillTimer(hwnd, TIMER_HIDE);
+        clear_popup_deactivate_marker();
         ShowWindow(hwnd, SW_HIDE);
+        return;
+    }
+
+    // Clicking the tray icon while the popup owns focus first causes WA_INACTIVE.
+    // The shell then delivers WM_TRAY. Treat that very recent deactivate as the
+    // same toggle gesture instead of reopening the popup immediately.
+    if consume_recent_popup_deactivate() {
         return;
     }
 
@@ -407,6 +419,8 @@ unsafe fn toggle_popup(hwnd: HWND) {
 }
 
 unsafe fn show_popup(hwnd: HWND) {
+    clear_popup_deactivate_marker();
+
     let mut cursor = POINT::default();
     GetCursorPos(&mut cursor);
 
@@ -442,6 +456,8 @@ unsafe fn show_popup(hwnd: HWND) {
 }
 
 unsafe fn show_context_menu(main_hwnd: HWND) {
+    clear_popup_deactivate_marker();
+
     let Some(menu_hwnd) = menu_hwnd() else {
         return;
     };
@@ -604,6 +620,39 @@ fn mark_request_due(slot: &OnceLock<Mutex<Option<Instant>>>, min_interval: Durat
     }
     *last = Some(now);
     true
+}
+
+fn mark_popup_deactivated() {
+    let Some(slot) = LAST_POPUP_DEACTIVATE.get() else {
+        return;
+    };
+    if let Ok(mut last) = slot.lock() {
+        *last = Some(Instant::now());
+    }
+}
+
+fn consume_recent_popup_deactivate() -> bool {
+    let Some(slot) = LAST_POPUP_DEACTIVATE.get() else {
+        return false;
+    };
+    let Ok(mut last) = slot.lock() else {
+        return false;
+    };
+    let now = Instant::now();
+    let recent = last
+        .as_ref()
+        .is_some_and(|previous| now.duration_since(*previous) <= TRAY_DEACTIVATE_TOGGLE_WINDOW);
+    *last = None;
+    recent
+}
+
+fn clear_popup_deactivate_marker() {
+    let Some(slot) = LAST_POPUP_DEACTIVATE.get() else {
+        return;
+    };
+    if let Ok(mut last) = slot.lock() {
+        *last = None;
+    }
 }
 
 unsafe fn paint_popup(hwnd: HWND) {
